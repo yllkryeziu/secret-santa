@@ -16,6 +16,17 @@
   .error { color: #d33; }
   .big { font-size: 2rem; font-weight: bold; }
   [hidden] { display: none !important; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .75rem; }
+  .card { height: 7rem; padding: 0; border: 0; background: none; color: inherit; perspective: 600px; }
+  .card .inner { position: relative; height: 100%; transition: transform .5s; transform-style: preserve-3d; }
+  .card.flipped .inner { transform: rotateY(180deg); }
+  .card .face { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: .5rem; text-align: center; overflow-wrap: anywhere; border-radius: 8px;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+  .card .back { transform: rotateY(180deg); background: color-mix(in srgb, currentColor 8%, transparent); }
+  .card .name { font-weight: bold; font-size: 1.1rem; }
 </style>
 </head>
 <body>
@@ -31,6 +42,10 @@
     <p class="muted">Send each person their own link. Opening someone else's link shows their match.</p>
     <ul id="links"></ul>
     <p><button id="copyAll">Copy all</button></p>
+
+    <h2>Cards</h2>
+    <p class="muted">Tap a card to flip it and see who that person gets.</p>
+    <div id="cards" class="cards"></div>
   </div>
 </section>
 
@@ -81,6 +96,7 @@
     order.forEach((g, i) => { target[g] = order[(i + 1) % order.length]; });
 
     $('links').innerHTML = '';
+    $('cards').innerHTML = '';
     lines = [];
     for (const g of names) {
       const url = base + '#' + encode(JSON.stringify([g, target[g]]));
@@ -101,11 +117,36 @@
       row.append(input, btn);
       li.append(label, row);
       $('links').append(li);
+
+      $('cards').append(makeCard(g, target[g]));
     }
     $('results').hidden = false;
   };
 
   $('copyAll').onclick = e => copy(lines.join('\n'), e.target);
+
+  function makeCard(giver, receiver) {
+    const face = (cls, small, name) => {
+      const d = document.createElement('div');
+      d.className = 'face ' + cls;
+      const s = document.createElement('span');
+      s.className = 'muted';
+      s.textContent = small;
+      const n = document.createElement('span');
+      n.className = 'name';
+      n.textContent = name;
+      cls === 'front' ? d.append(n, s) : d.append(s, n);
+      return d;
+    };
+    const card = document.createElement('button');
+    card.className = 'card';
+    const inner = document.createElement('div');
+    inner.className = 'inner';
+    inner.append(face('front', 'tap to reveal', giver), face('back', giver + ' gets', receiver));
+    card.append(inner);
+    card.onclick = () => card.classList.toggle('flipped');
+    return card;
+  }
 
   function copy(text, btn) {
     navigator.clipboard.writeText(text).then(() => {
