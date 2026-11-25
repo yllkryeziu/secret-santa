@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secret Santa</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  textarea, input { width: 100%; box-sizing: border-box; font: inherit; }
+  button { font: inherit; padding: .3rem .8rem; cursor: pointer; }
+  ul { list-style: none; padding: 0; }
+  li { margin: .8rem 0; }
+  .row { display: flex; gap: .5rem; }
+  .muted { opacity: .7; font-size: .9em; }
+  .error { color: #d33; }
+  .big { font-size: 2rem; font-weight: bold; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>Secret Santa</h1>
+
+<section id="setup">
+  <p>Enter one name per line and press Generate. Each person gets a private link that only shows who <em>they</em> are buying a gift for.</p>
+  <textarea id="names" rows="10" placeholder="Alice&#10;Bob&#10;Carol"></textarea>
+  <p><button id="generate">Generate</button> <span id="error" class="error"></span></p>
+
+  <div id="results" hidden>
+    <h2>Links</h2>
+    <p class="muted">Send each person their own link. Opening someone else's link shows their match.</p>
+    <ul id="links"></ul>
+    <p><button id="copyAll">Copy all</button></p>
+  </div>
+</section>
+
+<section id="reveal" hidden>
+  <p>Hi <strong id="giver"></strong>!</p>
+  <p><button id="show">Show who I'm buying for</button></p>
+  <p id="receiver" class="big" hidden></p>
+</section>
+
+<p id="bad" class="error" hidden>This link is invalid.</p>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  // UTF-8 safe base64url, so the name isn't readable straight from the link
+  const encode = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const decode = s => new TextDecoder().decode(
+    Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)));
+
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  const base = location.href.split('#')[0];
+  let lines = [];
+
+  $('generate').onclick = () => {
+    $('error').textContent = '';
+    $('results').hidden = true;
+
+    const names = $('names').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const seen = new Set();
+    for (const n of names) {
+      const k = n.toLowerCase();
+      if (seen.has(k)) { $('error').textContent = `Duplicate name: ${n}`; return; }
+      seen.add(k);
+    }
+    if (names.length < 3) { $('error').textContent = 'Enter at least 3 names.'; return; }
+
+    // One big random cycle: nobody draws themselves
+    const order = shuffle([...names]);
+    const target = {};
+    order.forEach((g, i) => { target[g] = order[(i + 1) % order.length]; });
+
+    $('links').innerHTML = '';
+    lines = [];
+    for (const g of names) {
+      const url = base + '#' + encode(JSON.stringify([g, target[g]]));
+      lines.push(`${g}: ${url}`);
+
+      const li = document.createElement('li');
+      const label = document.createElement('strong');
+      label.textContent = g;
+      const row = document.createElement('div');
+      row.className = 'row';
+      const input = document.createElement('input');
+      input.readOnly = true;
+      input.value = url;
+      input.onfocus = () => input.select();
+      const btn = document.createElement('button');
+      btn.textContent = 'Copy';
+      btn.onclick = () => copy(url, btn);
+      row.append(input, btn);
+      li.append(label, row);
+      $('links').append(li);
+    }
+    $('results').hidden = false;
+  };
+
+  $('copyAll').onclick = e => copy(lines.join('\n'), e.target);
+
+  function copy(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const old = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = old; }, 1200);
+    });
+  }
+
+  if (location.hash.length > 1) {
+    $('setup').hidden = true;
+    try {
+      const [g, r] = JSON.parse(decode(location.hash.slice(1)));
+      if (typeof g !== 'string' || typeof r !== 'string') throw 0;
+      $('giver').textContent = g;
+      $('receiver').textContent = r;
+      $('reveal').hidden = false;
+      $('show').onclick = () => { $('show').hidden = true; $('receiver').hidden = false; };
+    } catch {
+      $('bad').hidden = false;
+    }
+  }
+  addEventListener('hashchange', () => location.reload());
+</script>
+</body>
+</html>
