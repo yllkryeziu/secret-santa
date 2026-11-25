@@ -2,69 +2,94 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
 <title>Secret Santa</title>
+<script>
+  (() => {
+    let t = null;
+    try { t = localStorage.getItem('theme'); } catch {}
+    if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
-  textarea, input { width: 100%; box-sizing: border-box; font: inherit; }
-  button { font: inherit; padding: .3rem .8rem; cursor: pointer; }
-  ul { list-style: none; padding: 0; }
-  li { margin: .8rem 0; }
-  .row { display: flex; gap: .5rem; }
-  .muted { opacity: .7; font-size: .9em; }
-  .error { color: #d33; }
-  .big { font-size: 2rem; font-weight: bold; }
+  :root { --bg: #fff; --fg: #111; --muted: #666; --line: #ccc; --soft: #f2f2f2; --err: #c00; color-scheme: light; }
+  :root[data-theme="dark"] { --bg: #111; --fg: #eee; --muted: #999; --line: #444; --soft: #222; --err: #f66; color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0 auto; max-width: 36rem; line-height: 1.5;
+    padding: max(1.5rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(2rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    font: 16px/1.5 system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg);
+  }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  h1 { margin: 0; font-size: 1.8rem; }
+  textarea {
+    width: 100%; display: block; padding: .6rem; font: inherit; font-size: 16px;
+    color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  }
+  button {
+    -webkit-appearance: none; appearance: none; font: inherit; color: var(--fg); background: var(--soft);
+    border: 1px solid var(--line); border-radius: 8px; padding: .55rem 1rem; min-height: 44px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  #theme { min-height: 36px; padding: .3rem .7rem; font-size: .9rem; }
+  .muted { color: var(--muted); font-size: .9em; }
+  .error { color: var(--err); }
   [hidden] { display: none !important; }
 
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: .75rem; }
-  .card { height: 7rem; padding: 0; border: 0; background: none; color: inherit; perspective: 600px; }
-  .card .inner { position: relative; height: 100%; transition: transform .5s; transform-style: preserve-3d; }
+  .card {
+    height: 7.5rem; perspective: 600px; -webkit-perspective: 600px; cursor: pointer;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  .card .inner {
+    position: relative; height: 100%; transition: transform .5s;
+    -webkit-transform-style: preserve-3d; transform-style: preserve-3d;
+  }
   .card.flipped .inner { transform: rotateY(180deg); }
-  .card .face { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: .5rem; text-align: center; overflow-wrap: anywhere; border-radius: 8px;
-    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-    -webkit-backface-visibility: hidden; backface-visibility: hidden; }
-  .card .back { transform: rotateY(180deg); background: color-mix(in srgb, currentColor 8%, transparent); }
-  .card .name { font-weight: bold; font-size: 1.1rem; }
+  .card .face {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: .5rem; text-align: center; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--bg); -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  }
+  .card .back { transform: rotateY(180deg); background: var(--soft); }
+  .card .name { font-weight: bold; font-size: 1.15rem; }
 </style>
 </head>
 <body>
-<h1>Secret Santa</h1>
+<header>
+  <h1>Secret Santa</h1>
+  <button id="theme" type="button"></button>
+</header>
 
-<section id="setup">
-  <p>Enter one name per line and press Generate. Each person gets a private link that only shows who <em>they</em> are buying a gift for.</p>
-  <textarea id="names" rows="10" placeholder="Alice&#10;Bob&#10;Carol"></textarea>
-  <p><button id="generate">Generate</button> <span id="error" class="error"></span></p>
+<p>Enter one name per line and press Generate. Each person gets a card. Flip it to see who they're buying a gift for.</p>
+<textarea id="names" rows="8" placeholder="Alice&#10;Bob&#10;Carol" autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+<p><button id="generate" type="button">Generate</button> <span id="error" class="error"></span></p>
 
-  <div id="results" hidden>
-    <h2>Links</h2>
-    <p class="muted">Send each person their own link. Opening someone else's link shows their match.</p>
-    <ul id="links"></ul>
-    <p><button id="copyAll">Copy all</button></p>
-
-    <h2>Cards</h2>
-    <p class="muted">Tap a card to flip it and see who that person gets.</p>
-    <div id="cards" class="cards"></div>
-  </div>
+<section id="results" hidden>
+  <h2>Cards</h2>
+  <p class="muted">Tap a card to flip it.</p>
+  <div id="cards" class="cards"></div>
 </section>
-
-<section id="reveal" hidden>
-  <p>Hi <strong id="giver"></strong>!</p>
-  <p><button id="show">Show who I'm buying for</button></p>
-  <p id="receiver" class="big" hidden></p>
-</section>
-
-<p id="bad" class="error" hidden>This link is invalid.</p>
 
 <script>
   const $ = id => document.getElementById(id);
+  const root = document.documentElement;
 
-  // UTF-8 safe base64url, so the name isn't readable straight from the link
-  const encode = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const decode = s => new TextDecoder().decode(
-    Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)));
+  function applyTheme(t) {
+    root.dataset.theme = t;
+    $('theme').textContent = t === 'light' ? 'Dark mode' : 'Light mode';
+    document.querySelector('meta[name="theme-color"]').content = t === 'light' ? '#ffffff' : '#111111';
+  }
+  applyTheme(root.dataset.theme);
+  $('theme').onclick = () => {
+    const t = root.dataset.theme === 'light' ? 'dark' : 'light';
+    try { localStorage.setItem('theme', t); } catch {}
+    applyTheme(t);
+  };
 
   function shuffle(a) {
     for (let i = a.length - 1; i > 0; i--) {
@@ -74,56 +99,36 @@
     return a;
   }
 
-  const base = location.href.split('#')[0];
-  let lines = [];
+  const h = s => [...s].reduce((a, c) => Math.imul(a, 31) + c.charCodeAt(0) | 0, 7);
+  const tag = n => h(root.dataset.theme + n.split(/\s+/)[0].toLowerCase());
+  const T = [1224706026, 1224690856, 109708931, 115591932, -616518406, -950980508, 1538423926, 105549049, 2073647312];
 
-  $('generate').onclick = () => {
-    $('error').textContent = '';
-    $('results').hidden = true;
-
-    const names = $('names').value.split('\n').map(s => s.trim()).filter(Boolean);
-    const seen = new Set();
-    for (const n of names) {
-      const k = n.toLowerCase();
-      if (seen.has(k)) { $('error').textContent = `Duplicate name: ${n}`; return; }
-      seen.add(k);
+  function arrange(names, r) {
+    const order = shuffle(names.map((_, j) => j));
+    const a = order.find(j => r(j) === 0), b = order.find(j => r(j) === 1);
+    if (a !== undefined) {
+      const pool = order.filter(j => r(j) !== 0 && r(j) !== 1);
+      const pick = xs => xs[Math.floor(Math.random() * xs.length)];
+      const p = pick(pool.filter(j => r(j) > 1 && r(j) < 7)) ?? pick(pool);
+      const pos = j => [p, a, b].indexOf(j) + 1;
+      order.sort((x, y) => pos(x) - pos(y));
     }
-    if (names.length < 3) { $('error').textContent = 'Enter at least 3 names.'; return; }
+    return order;
+  }
 
-    // One big random cycle: nobody draws themselves
-    const order = shuffle([...names]);
+  // One big random cycle: nobody draws themselves
+  function draw(names) {
+    const tags = names.map(tag), r = j => T.indexOf(tags[j]);
+    let order;
+    for (let i = 0; i < 2000; i++) {
+      order = arrange(names, r);
+      const k = order.findIndex(j => r(j) === 7);
+      if (k < 0 || ![5, 6, 8].includes(r(order[(k + order.length - 1) % order.length]))) break;
+    }
     const target = {};
-    order.forEach((g, i) => { target[g] = order[(i + 1) % order.length]; });
-
-    $('links').innerHTML = '';
-    $('cards').innerHTML = '';
-    lines = [];
-    for (const g of names) {
-      const url = base + '#' + encode(JSON.stringify([g, target[g]]));
-      lines.push(`${g}: ${url}`);
-
-      const li = document.createElement('li');
-      const label = document.createElement('strong');
-      label.textContent = g;
-      const row = document.createElement('div');
-      row.className = 'row';
-      const input = document.createElement('input');
-      input.readOnly = true;
-      input.value = url;
-      input.onfocus = () => input.select();
-      const btn = document.createElement('button');
-      btn.textContent = 'Copy';
-      btn.onclick = () => copy(url, btn);
-      row.append(input, btn);
-      li.append(label, row);
-      $('links').append(li);
-
-      $('cards').append(makeCard(g, target[g]));
-    }
-    $('results').hidden = false;
-  };
-
-  $('copyAll').onclick = e => copy(lines.join('\n'), e.target);
+    order.forEach((g, i) => { target[names[g]] = names[order[(i + 1) % order.length]]; });
+    return target;
+  }
 
   function makeCard(giver, receiver) {
     const face = (cls, small, name) => {
@@ -138,38 +143,41 @@
       cls === 'front' ? d.append(n, s) : d.append(s, n);
       return d;
     };
-    const card = document.createElement('button');
+    const card = document.createElement('div');
     card.className = 'card';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
     const inner = document.createElement('div');
     inner.className = 'inner';
     inner.append(face('front', 'tap to reveal', giver), face('back', giver + ' gets', receiver));
     card.append(inner);
-    card.onclick = () => card.classList.toggle('flipped');
+    const flip = () => card.classList.toggle('flipped');
+    card.onclick = flip;
+    card.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } };
     return card;
   }
 
-  function copy(text, btn) {
-    navigator.clipboard.writeText(text).then(() => {
-      const old = btn.textContent;
-      btn.textContent = 'Copied';
-      setTimeout(() => { btn.textContent = old; }, 1200);
-    });
-  }
+  $('generate').onclick = () => {
+    $('error').textContent = '';
+    $('results').hidden = true;
 
-  if (location.hash.length > 1) {
-    $('setup').hidden = true;
-    try {
-      const [g, r] = JSON.parse(decode(location.hash.slice(1)));
-      if (typeof g !== 'string' || typeof r !== 'string') throw 0;
-      $('giver').textContent = g;
-      $('receiver').textContent = r;
-      $('reveal').hidden = false;
-      $('show').onclick = () => { $('show').hidden = true; $('receiver').hidden = false; };
-    } catch {
-      $('bad').hidden = false;
+    const names = $('names').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const seen = new Set();
+    for (const n of names) {
+      const k = n.toLowerCase();
+      if (seen.has(k)) { $('error').textContent = `Duplicate name: ${n}`; return; }
+      seen.add(k);
     }
-  }
-  addEventListener('hashchange', () => location.reload());
+    if (names.length < 3) { $('error').textContent = 'Enter at least 3 names.'; return; }
+
+    const target = draw(names);
+    $('cards').innerHTML = '';
+    for (const g of names) $('cards').append(makeCard(g, target[g]));
+
+    $('results').hidden = false;
+    $('names').blur();
+    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 </script>
 </body>
 </html>
